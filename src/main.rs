@@ -1,12 +1,26 @@
+use std::collections::HashMap;
+
 use axum::{
     http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
     Router,
 };
+use time::Date;
+use uuid::Uuid;
+
+struct Person {
+    pub id: Uuid,
+    pub name: String,
+    pub nick: String,
+    pub birth_date: Date,
+    pub stach: Vec<String>,
+}
 
 #[tokio::main]
 async fn main() {
+    let people: HashMap<Uuid, Person> = HashMap::new();
+
     // build our application with a single route
     let app = Router::new()
         .route("/pessoas", get(search_people))
