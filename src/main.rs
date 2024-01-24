@@ -1,14 +1,16 @@
 use std::{collections::HashMap, sync::Arc};
 
 use axum::{
+    extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
-    Router,
+    Json, Router,
 };
+use serde::Serialize;
 use time::{macros::date, Date};
 use uuid::Uuid;
-
+#[derive(Clone, Serialize)]
 struct Person {
     pub id: Uuid,
     pub name: String,
@@ -17,7 +19,7 @@ struct Person {
     pub stach: Vec<String>,
 }
 
-type AppState = HashMap<Uuid, Person>;
+type AppState = Arc<HashMap<Uuid, Person>>;
 
 #[tokio::main]
 async fn main() {
@@ -52,8 +54,14 @@ async fn search_people() -> impl IntoResponse {
     (StatusCode::OK, "Busca Pessoas")
 }
 
-async fn find_person() -> impl IntoResponse {
-    (StatusCode::OK, "Find")
+async fn find_person(
+    State(people): State<AppState>,
+    Path(person_id): Path<Uuid>,
+) -> impl IntoResponse {
+    match people.get(&person_id) {
+        Some(person) => Ok(Json(person.clone())),
+        None => Err(StatusCode::NOT_FOUND),
+    }
 }
 
 async fn create_person() -> impl IntoResponse {
