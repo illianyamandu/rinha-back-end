@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use axum::{
     http::StatusCode,
@@ -6,7 +6,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use time::Date;
+use time::{macros::date, Date};
 use uuid::Uuid;
 
 struct Person {
@@ -17,16 +17,31 @@ struct Person {
     pub stach: Vec<String>,
 }
 
+type AppState = HashMap<Uuid, Person>;
+
 #[tokio::main]
 async fn main() {
-    let people: HashMap<Uuid, Person> = HashMap::new();
+    let mut people: HashMap<Uuid, Person> = HashMap::new();
+
+    let person = Person {
+        id: Uuid::now_v7(),
+        name: "João".to_string(),
+        nick: "Joãozinho".to_string(),
+        birth_date: date!(1990 - 1 - 1),
+        stach: vec!["C++".to_string(), "Rust".to_string()],
+    };
+
+    people.insert(person.id, person);
+
+    let app_state = Arc::new(people);
 
     // build our application with a single route
     let app = Router::new()
         .route("/pessoas", get(search_people))
         .route("/pessoas/:id", get(find_person))
         .route("/contagem-pessoas", get(count_people))
-        .route("/pessoas", post(create_person));
+        .route("/pessoas", post(create_person))
+        .with_state(app_state);
 
     // run our app with hyper, listening globally on port 3000
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
