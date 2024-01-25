@@ -10,13 +10,19 @@ use axum::{
 use serde::Serialize;
 use time::{macros::date, Date};
 use uuid::Uuid;
+
+time::serde::format_description!(date_format, Date, "[year]-[month]-[day]");
+
 #[derive(Clone, Serialize)]
 struct Person {
     pub id: Uuid,
+    #[serde(rename = "nome")]
     pub name: String,
+    #[serde(rename = "apelido")]
     pub nick: String,
+    #[serde(rename = "nascimento", with = "date_format")]
     pub birth_date: Date,
-    pub stach: Vec<String>,
+    pub stack: Option<Vec<String>>,
 }
 
 type AppState = Arc<HashMap<Uuid, Person>>;
@@ -30,8 +36,10 @@ async fn main() {
         name: "João".to_string(),
         nick: "Joãozinho".to_string(),
         birth_date: date!(1990 - 1 - 1),
-        stach: vec!["C++".to_string(), "Rust".to_string()],
+        stack: None, //vec!["C++".to_string(), "Rust".to_string()],
     };
+
+    println!("{}", person.id);
 
     people.insert(person.id, person);
 
