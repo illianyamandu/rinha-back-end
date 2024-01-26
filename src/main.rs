@@ -1,14 +1,15 @@
 use std::{collections::HashMap, sync::Arc};
 
 use axum::{
-    extract::{Path, State},
+    extract::{Json, Path, State},
     http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
-    Json, Router,
+    Router,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use time::{macros::date, Date};
+use tokio::sync::Mutex;
 use uuid::Uuid;
 
 time::serde::format_description!(date_format, Date, "[year]-[month]-[day]");
@@ -25,7 +26,18 @@ struct Person {
     pub stack: Option<Vec<String>>,
 }
 
-type AppState = Arc<HashMap<Uuid, Person>>;
+#[derive(Clone, Deserialize)]
+struct NewPerson {
+    #[serde(rename = "nome")]
+    pub name: String,
+    #[serde(rename = "apelido")]
+    pub nick: String,
+    #[serde(rename = "nascimento", with = "date_format")]
+    pub birth_date: Date,
+    pub stack: Option<Vec<String>>,
+}
+
+type AppState = Arc<Mutex<HashMap<Uuid, Person>>>;
 
 #[tokio::main]
 async fn main() {
@@ -43,7 +55,7 @@ async fn main() {
 
     people.insert(person.id, person);
 
-    let app_state = Arc::new(people);
+    let app_state: AppState = Arc::new(Mutex::new(people));
 
     // build our application with a single route
     let app = Router::new()
@@ -66,13 +78,27 @@ async fn find_person(
     State(people): State<AppState>,
     Path(person_id): Path<Uuid>,
 ) -> impl IntoResponse {
-    match people.get(&person_id) {
+    match people.lock().await.get(&person_id) {
         Some(person) => Ok(Json(person.clone())),
         None => Err(StatusCode::NOT_FOUND),
     }
 }
 
-async fn create_person() -> impl IntoResponse {
+async fn create_person(
+    State(people): State<AppState>,
+    Json(new_person): Json<NewPerson>,
+) -> impl IntoResponse {
+    let id = Uuid::now_v7();
+    let person = Person {
+        id,
+        name: new_person.name,
+        nick: new_person.nick,
+        birth_date: new_person.birth_date,
+        stack: new_person.stack,
+    };
+
+    people.lock().await.insert(id, person);
+
     (StatusCode::OK, "Person")
 }
 
