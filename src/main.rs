@@ -9,7 +9,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use time::{macros::date, Date};
-use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 use uuid::Uuid;
 
 time::serde::format_description!(date_format, Date, "[year]-[month]-[day]");
@@ -37,7 +37,7 @@ struct NewPerson {
     pub stack: Option<Vec<String>>,
 }
 
-type AppState = Arc<Mutex<HashMap<Uuid, Person>>>;
+type AppState = Arc<RwLock<HashMap<Uuid, Person>>>;
 
 #[tokio::main]
 async fn main() {
@@ -55,7 +55,7 @@ async fn main() {
 
     people.insert(person.id, person);
 
-    let app_state: AppState = Arc::new(Mutex::new(people));
+    let app_state: AppState = Arc::new(RwLock::new(people));
 
     // build our application with a single route
     let app = Router::new()
@@ -78,7 +78,7 @@ async fn find_person(
     State(people): State<AppState>,
     Path(person_id): Path<Uuid>,
 ) -> impl IntoResponse {
-    match people.lock().await.get(&person_id) {
+    match people.read().await.get(&person_id) {
         Some(person) => Ok(Json(person.clone())),
         None => Err(StatusCode::NOT_FOUND),
     }
@@ -97,11 +97,12 @@ async fn create_person(
         stack: new_person.stack,
     };
 
-    people.lock().await.insert(id, person);
+    people.write().await.insert(id, person.clone());
 
-    (StatusCode::OK, "Person")
+    (StatusCode::OK, Json(person))
 }
 
-async fn count_people() -> impl IntoResponse {
-    (StatusCode::OK, "Count")
+async fn count_people(State(people): State<AppState>) -> impl IntoResponse {
+    let count = people.read().await.len();
+    (StatusCode::OK, Json(count))
 }
