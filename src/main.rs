@@ -27,9 +27,28 @@ struct Person {
 }
 
 #[derive(Clone, Deserialize)]
+pub struct PersonName(String);
+
+pub enum PersonNameError {
+    NameTooLong,
+}
+
+impl TryFrom<String> for PersonName {
+    type Error = PersonNameError;
+
+    fn try_from(name: String) -> Result<Self, Self::Error> {
+        if name.len() > 100 {
+            return Err(PersonNameError::NameTooLong);
+        }
+
+        Ok(PersonName(name))
+    }
+}
+
+#[derive(Clone, Deserialize)]
 struct NewPerson {
     #[serde(rename = "nome")]
-    pub name: String,
+    pub name: PersonName,
     #[serde(rename = "apelido")]
     pub nick: String,
     #[serde(rename = "nascimento", with = "date_format")]
@@ -88,25 +107,20 @@ async fn create_person(
     State(people): State<AppState>,
     Json(new_person): Json<NewPerson>,
 ) -> impl IntoResponse {
-    if new_person.name.len() > 100 || new_person.nick.len() > 32 {
+    if new_person.name.0.len() > 100 || new_person.nick.len() > 32 {
         return Err(StatusCode::UNPROCESSABLE_ENTITY);
     }
 
-    match new_person.stack {
-        Some(ref stack) => {
-            for tech in stack {
-                if tech.len() > 32 {
-                    return Err(StatusCode::UNPROCESSABLE_ENTITY);
-                }
-            }
+    if let Some(ref stack) = new_person.stack {
+        if stack.iter().any(|tech| tech.len() > 32) {
+            return Err(StatusCode::UNPROCESSABLE_ENTITY);
         }
-        None => {}
     }
 
     let id = Uuid::now_v7();
     let person = Person {
         id,
-        name: new_person.name,
+        name: new_person.name.0,
         nick: new_person.nick,
         birth_date: new_person.birth_date,
         stack: new_person.stack,
