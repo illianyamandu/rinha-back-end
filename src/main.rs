@@ -27,21 +27,56 @@ struct Person {
 }
 
 #[derive(Clone, Deserialize)]
+#[serde(try_from = "String")]
 pub struct PersonName(String);
 
-pub enum PersonNameError {
-    NameTooLong,
-}
-
 impl TryFrom<String> for PersonName {
-    type Error = PersonNameError;
+    type Error = &'static str;
 
     fn try_from(name: String) -> Result<Self, Self::Error> {
         if name.len() > 100 {
-            return Err(PersonNameError::NameTooLong);
+            return Err("name too long");
         }
 
         Ok(PersonName(name))
+    }
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(try_from = "String")]
+pub struct Nick(String);
+
+impl TryFrom<String> for Nick {
+    type Error = &'static str;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        if value.len() > 32 {
+            return Err("nick too long");
+        }
+
+        Ok(Self(value))
+    }
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(try_from = "String")]
+pub struct Tech(String);
+
+impl TryFrom<String> for Tech {
+    type Error = &'static str;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        if value.len() > 32 {
+            return Err("tech too long");
+        }
+
+        Ok(Self(value))
+    }
+}
+
+impl From<Tech> for String {
+    fn from(value: Tech) -> Self {
+        value.0
     }
 }
 
@@ -50,10 +85,10 @@ struct NewPerson {
     #[serde(rename = "nome")]
     pub name: PersonName,
     #[serde(rename = "apelido")]
-    pub nick: String,
+    pub nick: Nick,
     #[serde(rename = "nascimento", with = "date_format")]
     pub birth_date: Date,
-    pub stack: Option<Vec<String>>,
+    pub stack: Option<Vec<Tech>>,
 }
 
 type AppState = Arc<RwLock<HashMap<Uuid, Person>>>;
@@ -107,28 +142,20 @@ async fn create_person(
     State(people): State<AppState>,
     Json(new_person): Json<NewPerson>,
 ) -> impl IntoResponse {
-    if new_person.name.0.len() > 100 || new_person.nick.len() > 32 {
-        return Err(StatusCode::UNPROCESSABLE_ENTITY);
-    }
-
-    if let Some(ref stack) = new_person.stack {
-        if stack.iter().any(|tech| tech.len() > 32) {
-            return Err(StatusCode::UNPROCESSABLE_ENTITY);
-        }
-    }
-
     let id = Uuid::now_v7();
     let person = Person {
         id,
         name: new_person.name.0,
-        nick: new_person.nick,
+        nick: new_person.nick.0,
         birth_date: new_person.birth_date,
-        stack: new_person.stack,
+        stack: new_person
+            .stack
+            .map(|stack| stack.into_iter().map(String::from).collect()),
     };
 
     people.write().await.insert(id, person.clone());
 
-    Ok((StatusCode::OK, Json(person)))
+    (StatusCode::OK, Json(person))
 }
 
 async fn count_people(State(people): State<AppState>) -> impl IntoResponse {
